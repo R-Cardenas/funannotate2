@@ -39,6 +39,7 @@ from .utilities import (
     create_directories,
     create_tmpdir,
     ensure_busco_lineage,
+    normalize_busco_lineage_dir,
     find_files,
     lookup_taxonomy,
     naming_slug,
@@ -908,6 +909,7 @@ def predict(args):
         {"superkingdom": taxonomy.get("superkingdom"), "kingdom": taxonomy.get("kingdom")}
     )
     busco_model_path = ensure_busco_lineage(busco_tax, logger)
+    normalize_busco_lineage_dir(busco_model_path)
 
     # now we can loop through the abinitio predictions and run busco for completion
     # write this to file for re-use if consensus file already present?

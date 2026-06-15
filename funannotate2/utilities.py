@@ -254,6 +254,38 @@ def ensure_busco_lineage(species, logger):
     return busco_model_path
 
 
+def normalize_busco_lineage_dir(lineage_path):
+    """
+    Ensure the lengths_cutoff file in a BUSCO lineage directory is in the
+    4-column odb10 format that buscolite expects (busco_id, 0, sigma, length).
+
+    Some S3-hosted lineage directories were built with a 3-column variant
+    (busco_id, sigma, length). buscolite raises ValueError when it encounters
+    this format. This function rewrites 3-column files in-place by inserting
+    a '0' placeholder as column 2, matching the odb10 layout that buscolite
+    discards during parsing anyway.
+
+    Proper odb12 lineages have no lengths_cutoff at all — those are left alone.
+    """
+    lengths_file = os.path.join(lineage_path, "lengths_cutoff")
+    if not os.path.isfile(lengths_file):
+        return
+    with open(lengths_file, "r") as fh:
+        first_line = fh.readline()
+    n_cols = len(first_line.rstrip().split("\t"))
+    if n_cols == 4:
+        return  # already correct odb10 format
+    if n_cols == 3:
+        lines = []
+        with open(lengths_file, "r") as fh:
+            for line in fh:
+                parts = line.rstrip().split("\t")
+                # insert '0' placeholder as column 2 to match odb10 layout
+                lines.append("\t".join([parts[0], "0", parts[1], parts[2]]))
+        with open(lengths_file, "w") as fh:
+            fh.write("\n".join(lines) + "\n")
+
+
 def download(url, name, wget=False, timeout=60, retries=3):
     """
     Download a file from a given URL with improved error handling and retries.
