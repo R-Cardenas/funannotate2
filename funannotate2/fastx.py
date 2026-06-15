@@ -460,8 +460,8 @@ def analyzeAssembly(
         asmgaps[title] = gaps
 
     # calc combined
-    percentMask = maskLen / float(fa.size)
-    percentGaps = gapLen / float(fa.size)
+    percentMask = maskLen / float(fa.size) if fa.size else 0.0
+    percentGaps = gapLen / float(fa.size) if fa.size else 0.0
     if masked_output:
         # write softmasked bed file
         counter = 1

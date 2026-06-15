@@ -197,3 +197,37 @@ Funannotate2 includes a CITATION.cff file that provides citation information for
 
 To cite funannotate2 in your work, you can use the citation information from the CITATION.cff file or generate a citation in your preferred format using tools like [citeas.org](https://citeas.org/).
 
+---
+
+## R-Cardenas Fork
+
+This is a fork of [nextgenusfs/funannotate2](https://github.com/nextgenusfs/funannotate2), maintained at [R-Cardenas/funannotate2](https://github.com/R-Cardenas/funannotate2).
+
+### Fixes applied
+
+| File | Fix |
+|------|-----|
+| `utilities.py` | `ensure_busco_lineage()`: HEAD-probes the primary URL before downloading; falls back to odb10 if odb12 returns 4xx; renames the extracted directory to the expected path; emits a clear actionable error if all candidates fail |
+| `predict.py` | Guard `mito_contigs.keys()` against `None` when the mitochondrial refseq database is not installed |
+| `predict.py` | Guard all `/ float(stats["total"])` BUSCO coverage divisions against zero |
+| `abinitio.py` | Guard `sum()/len()` divisions in `test_training()` against empty prediction lists |
+| `train.py` | Guard `countGenesCDS / countGenes` against empty training gene dictionary |
+| `train.py` | Initialise `values1/2/3` before loop in `getTrainResults()` to prevent `UnboundLocalError` on malformed output |
+| `fastx.py` | Guard `maskLen / fa.size` and `gapLen / fa.size` against zero-size FASTA |
+| `memory.py` | Guard `avg_rss_mb` and `avg_vms_mb` against empty sample lists |
+
+### Container usage
+
+The fork is installed into the base `nextgenusfs/funannotate2` container via:
+
+```dockerfile
+FROM nextgenusfs/funannotate2:sha-1a7e335
+
+RUN /app/.pixi/envs/default/bin/pip install --no-deps \
+    git+https://github.com/R-Cardenas/funannotate2@v26.6.9-mng-1
+
+ENTRYPOINT []
+```
+
+BUSCO databases can be pre-staged and pointed to via the `FUNANNOTATE2_DB` environment variable — when the expected lineage directory is already present, `ensure_busco_lineage()` returns immediately without attempting any download.
+

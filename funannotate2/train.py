@@ -445,6 +445,8 @@ def getTrainResults(infile):
       - Gene level value at index 6
       - Gene level value at index 7
     """
+    # Initialise to None so missing lines produce a clear ValueError, not UnboundLocalError
+    values1 = values2 = values3 = None
     with open(infile, "r") as train:
         for line in train:
             try:
@@ -461,14 +463,16 @@ def getTrainResults(infile):
             if line.startswith("gene level"):
                 line = line.replace(" ", "")
                 values3 = line.split("|")  # get [6] and [7]
-        return (
-            float(values1[1]),
-            float(values1[2]),
-            float(values2[6]),
-            float(values2[7]),
-            float(values3[6]),
-            float(values3[7]),
-        )
+    if not all([values1, values2, values3]):
+        raise ValueError(f"Training results file missing expected output lines: {infile}")
+    return (
+        float(values1[1]),
+        float(values1[2]),
+        float(values2[6]),
+        float(values2[7]),
+        float(values3[6]),
+        float(values3[7]),
+    )
 
 
 def count_multi_CDS_genes(indict):
@@ -536,7 +540,7 @@ def selectTrainingModels(
     logger.debug(f"{countGenes} training set genes; {countGenesCDS} have multi-CDS")
 
     # calculate ratio of multi-CDS genes
-    multiCDSratio = countGenesCDS / countGenes
+    multiCDSratio = countGenesCDS / countGenes if countGenes else 0.0
     multiCDScheck = False
     if multiCDSratio >= mult_cds_threshold:
         multiCDScheck = True

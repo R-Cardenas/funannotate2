@@ -96,8 +96,8 @@ class MemoryMonitor:
                     "duration_seconds": time.time() - start_time,
                     "peak_rss_mb": max(rss_values),
                     "peak_vms_mb": max(vms_values),
-                    "avg_rss_mb": sum(rss_values) / len(rss_values),
-                    "avg_vms_mb": sum(vms_values) / len(vms_values),
+                    "avg_rss_mb": sum(rss_values) / len(rss_values) if rss_values else 0.0,
+                    "avg_vms_mb": sum(vms_values) / len(vms_values) if vms_values else 0.0,
                     "sample_count": len(memory_samples),
                     "samples": memory_samples,
                 }
