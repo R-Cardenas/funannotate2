@@ -208,13 +208,35 @@ This is a fork of [nextgenusfs/funannotate2](https://github.com/nextgenusfs/funa
 | File | Fix |
 |------|-----|
 | `utilities.py` | `ensure_busco_lineage()`: HEAD-probes the primary URL before downloading; falls back to odb10 if odb12 returns 4xx; renames the extracted directory to the expected path; emits a clear actionable error if all candidates fail |
+| `utilities.py` | `normalize_busco_lineage_dir()`: converts a 3-column `lengths_cutoff` file (odb12 transitional format) to the 4-column odb10 format that buscolite expects |
+| `predict.py` | Prefer `_odb10` BUSCO lineage over `_odb12` for all buscolite completeness calls — see [odb10 vs odb12](#odb10-vs-odb12) below |
 | `predict.py` | Guard `mito_contigs.keys()` against `None` when the mitochondrial refseq database is not installed |
 | `predict.py` | Guard all `/ float(stats["total"])` BUSCO coverage divisions against zero |
+| `annotate.py` | Prefer `_odb10` BUSCO lineage for buscolite calls (same reason as predict.py) |
+| `annotate.py` | Guard `pfam_search`, `dbcan_search`, `swissprot_blast`, and `merops_blast` return values against `None` when the annotation database is absent |
 | `abinitio.py` | Guard `sum()/len()` divisions in `test_training()` against empty prediction lists |
 | `train.py` | Guard `countGenesCDS / countGenes` against empty training gene dictionary |
 | `train.py` | Initialise `values1/2/3` before loop in `getTrainResults()` to prevent `UnboundLocalError` on malformed output |
 | `fastx.py` | Guard `maskLen / fa.size` and `gapLen / fa.size` against zero-size FASTA |
 | `memory.py` | Guard `avg_rss_mb` and `avg_vms_mb` against empty sample lists |
+
+### odb10 vs odb12
+
+BUSCO lineage databases come in two generations:
+
+- **odb10** — based on OrthoDB v10 (~2021). Smaller lineage sets (e.g. 758 marker genes for fungi) but well-supported by the version of `buscolite` bundled with funannotate2.
+- **odb12** — based on OrthoDB v12 (~2023). Larger lineage sets (~1,019 marker genes for fungi, ~35% more) sourced from a much wider range of sampled genomes, giving more sensitive completeness estimates.
+
+**Why this fork uses odb10 for completeness scoring:**
+
+`buscolite` (the internal BUSCO library funannotate2 uses) was built for odb10 format. Real odb12 datasets cause two failure modes:
+
+1. The `lengths_cutoff` file changed from 4 columns to 3 columns between odb10 and odb12 — buscolite's parser hard-codes 4-column unpacking and crashes.
+2. odb12 HMM model names are not always present in the accompanying `scores_cutoff`, causing a `KeyError` when buscolite tries to look up a score for a hit it found.
+
+The practical consequence is that odb12 datasets **cannot be used reliably with the current version of buscolite**. This fork detects whether an `_odb10` lineage directory is available alongside the `_odb12` one, and routes all buscolite calls to it. The `normalize_busco_lineage_dir()` function handles any remaining `lengths_cutoff` format mismatches as a safety net.
+
+Completeness scores from odb10 are slightly less sensitive than odb12 would give, but they are accurate and stable. The gene models produced by the pipeline are unaffected — only the QC metric differs.
 
 ### Container usage
 
@@ -223,11 +245,15 @@ The fork is installed into the base `nextgenusfs/funannotate2` container via:
 ```dockerfile
 FROM nextgenusfs/funannotate2:sha-1a7e335
 
+RUN apt-get update && apt-get install -y --no-install-recommends git time && rm -rf /var/lib/apt/lists/*
+
+RUN /app/.pixi/envs/default/bin/pip install buscolite==26.4.22
+
 RUN /app/.pixi/envs/default/bin/pip install --no-deps \
-    git+https://github.com/R-Cardenas/funannotate2@v26.6.9-mng-1
+    git+https://github.com/R-Cardenas/funannotate2@v26.6.9-mng-5
 
 ENTRYPOINT []
 ```
 
-BUSCO databases can be pre-staged and pointed to via the `FUNANNOTATE2_DB` environment variable — when the expected lineage directory is already present, `ensure_busco_lineage()` returns immediately without attempting any download.
+BUSCO databases are pre-staged from S3 via Nextflow Fusion and pointed to using the `FUNANNOTATE2_DB` environment variable. When both `_odb10` and `_odb12` lineage directories are present under `FUNANNOTATE2_DB`, the pipeline uses odb12 for training and odb10 for buscolite completeness scoring automatically — no manual configuration needed.
 
