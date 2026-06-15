@@ -1,6 +1,7 @@
 import gzip
 import json
 import os
+import re
 import shutil
 import sys
 from collections import OrderedDict
@@ -909,6 +910,12 @@ def predict(args):
         {"superkingdom": taxonomy.get("superkingdom"), "kingdom": taxonomy.get("kingdom")}
     )
     busco_model_path = ensure_busco_lineage(busco_tax, logger)
+    # buscolite requires odb10-format datasets (HMM names consistent with scores_cutoff);
+    # prefer _odb10 version if present since buscolite doesn't handle real odb12 reliably
+    _odb10_path = re.sub(r"_odb\d+(\.\S+)?$", "_odb10", busco_model_path)
+    if os.path.isdir(_odb10_path) and _odb10_path != busco_model_path:
+        logger.info(f"Preferring odb10 lineage for buscolite: {os.path.basename(_odb10_path)}")
+        busco_model_path = _odb10_path
     normalize_busco_lineage_dir(busco_model_path)
 
     # now we can loop through the abinitio predictions and run busco for completion
