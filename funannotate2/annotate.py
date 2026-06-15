@@ -36,6 +36,8 @@ from .search import (
     swissprot2tsv,
     swissprot_blast,
 )
+import re
+
 from .utilities import (
     checkfile,
     choose_best_busco_species,
@@ -46,6 +48,7 @@ from .utilities import (
     load_json,
     lookup_taxonomy,
     naming_slug,
+    normalize_busco_lineage_dir,
     validate_busco_lineage,
 )
 
@@ -271,10 +274,14 @@ def annotate(args):
         start = time.time()
         pfam = pfam_search(digital_seqs, cpus=args.cpus)
         end = time.time()
-        logger.info(
-            f"Pfam-A search resulted in {len(pfam)} hits and finished in {round(end - start, 2)} seconds"
-        )
-        pfam_dict = pfam2tsv(pfam, pfam_all, pfam_annots)
+        if pfam is None:
+            logger.warning("Pfam-A database not found, skipping")
+            pfam_dict = {}
+        else:
+            logger.info(
+                f"Pfam-A search resulted in {len(pfam)} hits and finished in {round(end - start, 2)} seconds"
+            )
+            pfam_dict = pfam2tsv(pfam, pfam_all, pfam_annots)
     else:
         pfam_dict, _ = parse_annotations(pfam_annots)
         logger.info(
@@ -291,10 +298,14 @@ def annotate(args):
         start = time.time()
         dbcan = dbcan_search(digital_seqs, cpus=args.cpus)
         end = time.time()
-        logger.info(
-            f"dbCAN search resulted in {len(dbcan)} hits and finished in {round(end - start, 2)} seconds"
-        )
-        dbcan_dict = dbcan2tsv(dbcan, dbcan_all, dbcan_annots)
+        if dbcan is None:
+            logger.warning("dbCAN database not found, skipping")
+            dbcan_dict = {}
+        else:
+            logger.info(
+                f"dbCAN search resulted in {len(dbcan)} hits and finished in {round(end - start, 2)} seconds"
+            )
+            dbcan_dict = dbcan2tsv(dbcan, dbcan_all, dbcan_annots)
     else:
         dbcan_dict, _ = parse_annotations(dbcan_annots)
         logger.info(
@@ -312,10 +323,14 @@ def annotate(args):
         start = time.time()
         swiss = swissprot_blast(Proteins, cpus=args.cpus, tmpdir=tmp_dir)
         end = time.time()
-        logger.info(
-            f"UniProtKB/Swiss-Prot search resulted in {len(swiss)} hits and finished in {round(end - start, 2)} seconds"
-        )
-        swiss_dict = swissprot2tsv(swiss, swiss_all, swiss_annots)
+        if swiss is None:
+            logger.warning("UniProtKB/Swiss-Prot database not found, skipping")
+            swiss_dict = {}
+        else:
+            logger.info(
+                f"UniProtKB/Swiss-Prot search resulted in {len(swiss)} hits and finished in {round(end - start, 2)} seconds"
+            )
+            swiss_dict = swissprot2tsv(swiss, swiss_all, swiss_annots)
     else:
         swiss_dict, _ = parse_annotations(swiss_annots)
         logger.info(
@@ -332,10 +347,14 @@ def annotate(args):
         start = time.time()
         merops = merops_blast(Proteins, cpus=args.cpus, tmpdir=tmp_dir)
         end = time.time()
-        logger.info(
-            f"MEROPS search resulted in {len(merops)} hits and finished in {round(end - start, 2)} seconds"
-        )
-        merops_dict = merops2tsv(merops, merops_all, merops_annots)
+        if merops is None:
+            logger.warning("MEROPS database not found, skipping")
+            merops_dict = {}
+        else:
+            logger.info(
+                f"MEROPS search resulted in {len(merops)} hits and finished in {round(end - start, 2)} seconds"
+            )
+            merops_dict = merops2tsv(merops, merops_all, merops_annots)
     else:
         merops_dict, _ = parse_annotations(merops_annots)
         logger.info(
@@ -369,6 +388,11 @@ def annotate(args):
         # container, so this guards against the cryptic "<path> is not a
         # directory" failure from buscolite further down.
         busco_model_path = ensure_busco_lineage(busco_species, logger)
+        _odb10_path = re.sub(r"_odb\d+(\.\S+)?$", "_odb10", busco_model_path)
+        if os.path.isdir(_odb10_path) and _odb10_path != busco_model_path:
+            logger.info(f"Preferring odb10 lineage for buscolite: {os.path.basename(_odb10_path)}")
+            busco_model_path = _odb10_path
+        normalize_busco_lineage_dir(busco_model_path)
 
         # run busco proteome screen
         logger.info(
