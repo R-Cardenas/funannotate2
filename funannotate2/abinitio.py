@@ -3385,14 +3385,11 @@ def test_training(
         "ref_genes_found": len(preds),
         "ref_genes_missed": gFN,
         "extra_query_genes": len(data["rogue"]),
-        "average_aed": sum(data["aed"]) / len(data["aed"]),
-        "nucleotide_sensitivity": sum(data["nucleotide_sensitivity"])
-        / len(data["nucleotide_sensitivity"]),
-        "nucleotide_precision": sum(data["nucleotide_precision"])
-        / len(data["nucleotide_precision"]),
-        "exon_sensitivity": sum(data["exon_sensitivity"])
-        / len(data["exon_sensitivity"]),
-        "exon_precision": sum(data["exon_precision"]) / len(data["exon_precision"]),
+        "average_aed": sum(data["aed"]) / len(data["aed"]) if data["aed"] else 0.0,
+        "nucleotide_sensitivity": sum(data["nucleotide_sensitivity"]) / len(data["nucleotide_sensitivity"]) if data["nucleotide_sensitivity"] else 0.0,
+        "nucleotide_precision": sum(data["nucleotide_precision"]) / len(data["nucleotide_precision"]) if data["nucleotide_precision"] else 0.0,
+        "exon_sensitivity": sum(data["exon_sensitivity"]) / len(data["exon_sensitivity"]) if data["exon_sensitivity"] else 0.0,
+        "exon_precision": sum(data["exon_precision"]) / len(data["exon_precision"]) if data["exon_precision"] else 0.0,
         "gene_sensitivity": gene_sens,
         "gene_precision": gene_prec,
     }

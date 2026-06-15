@@ -203,7 +203,7 @@ def predict(args):
     GenomeFasta = os.path.join(misc_dir, "genome.fasta")
     GenomeMito = os.path.join(misc_dir, "genome.mito.fasta")
     contig_name_map = simplify_headers_drop(
-        args.fasta, GenomeFasta, GenomeMito, drop=list(mito_contigs.keys())
+        args.fasta, GenomeFasta, GenomeMito, drop=list(mito_contigs.keys()) if mito_contigs else []
     )
     # Build the BAM->simplified contig map for annorefine.bam2hints. The BAM
     # file references the user's original contig names, but everything
@@ -934,9 +934,7 @@ def predict(args):
                     logger=logger,
                     verbosity=0,
                 )
-                cov = (stats["single-copy"] + stats["duplicated"]) / float(
-                    stats["total"]
-                )
+                cov = (stats["single-copy"] + stats["duplicated"]) / float(stats["total"]) if stats["total"] else 0.0
             else:
                 cov = 0.00
             # measure completeness for each tool
@@ -1134,20 +1132,21 @@ def predict(args):
         logger=logger,
         verbosity=0,
     )
+    _t = float(stats["total"]) if stats["total"] else 1.0
     logger.info(
         "Assembly completeness:\n complete={:} [{:.2%}]\n single-copy={:} [{:.2%}]\n fragmented={:} [{:.2%}]\n duplicated={:} [{:.2%}]\n missing={:} [{:.2%}]\n total={:} [{:.2%}]".format(
             stats["single-copy"] + stats["duplicated"],
-            ((stats["single-copy"] + stats["duplicated"]) / float(stats["total"])),
+            (stats["single-copy"] + stats["duplicated"]) / _t,
             stats["single-copy"],
-            (stats["single-copy"] / float(stats["total"])),
+            stats["single-copy"] / _t,
             stats["fragmented"],
-            (stats["fragmented"] / float(stats["total"])),
+            stats["fragmented"] / _t,
             stats["duplicated"],
-            (stats["duplicated"] / float(stats["total"])),
+            stats["duplicated"] / _t,
             stats["missing"],
-            (stats["missing"] / float(stats["total"])),
+            stats["missing"] / _t,
             stats["total"],
-            (stats["total"] / float(stats["total"])),
+            stats["total"] / _t,
         )
     )
 

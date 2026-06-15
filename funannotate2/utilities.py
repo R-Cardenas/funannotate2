@@ -159,12 +159,32 @@ def get_odb_version(downloads_json_file):
     return sorted(odb_versions, reverse=True)[0]
 
 
+def _busco_url_candidates(primary_url):
+    """
+    Yield candidate download URLs for a BUSCO lineage, starting with the
+    primary URL from downloads.json and falling back to the odb10 equivalent.
+    This handles the common case where odb12 URLs in downloads.json have an
+    incorrect or not-yet-published date.
+    """
+    yield primary_url
+    # Build odb10 fallback: replace odb12.<date> with odb10.2024-01-08
+    fallback = re.sub(r"odb12\.\S+\.tar\.gz$", "odb10.2024-01-08.tar.gz", primary_url)
+    if fallback != primary_url:
+        yield fallback
+
+
 def ensure_busco_lineage(species, logger):
     """
     Ensure the BUSCO lineage `<species>_<odb_version>` is present under
     FUNANNOTATE2_DB, downloading and extracting it from the URL in
     downloads.json if missing. The check is a no-op when the directory
-    already exists, so callers can invoke this idempotently.
+    already exists (e.g. pre-staged via Fusion), so callers can invoke
+    this idempotently.
+
+    URL probing: issues a HEAD request before downloading. If the primary
+    odb12 URL returns 4xx, automatically falls back to the odb10 equivalent
+    and renames the extracted directory to the expected odb12 path so the
+    isdir check succeeds on future runs.
 
     Parameters:
     - species (str): BUSCO lineage species name (e.g. "fungi", "aspergillus").
@@ -174,33 +194,62 @@ def ensure_busco_lineage(species, logger):
     - str: Absolute path to the lineage directory.
 
     Raises:
-    - SystemExit(1): If the directory could not be made present after the
-      download/extract attempt.
+    - SystemExit(1): If no valid download URL could be found or the directory
+      could not be made present after the download/extract attempt.
     """
     downloads_json = os.path.join(os.path.dirname(__file__), "downloads.json")
     odb_version = get_odb_version(downloads_json)
-    busco_model_path = os.path.join(
-        env["FUNANNOTATE2_DB"], f"{species}_{odb_version}"
-    )
+    busco_model_path = os.path.join(env["FUNANNOTATE2_DB"], f"{species}_{odb_version}")
     if os.path.isdir(busco_model_path):
         return busco_model_path
+
     download_urls = load_json(downloads_json)
-    busco_url = download_urls["busco"][species][0]
-    busco_tgz = os.path.join(env["FUNANNOTATE2_DB"], os.path.basename(busco_url))
-    logger.info(f"Downloading {species}_{odb_version} model from {busco_url}")
-    download(busco_url, busco_tgz, wget=False)
+    primary_url = download_urls["busco"][species][0]
+
+    # Probe each candidate URL with a HEAD request before committing to a download
+    url_to_use = None
+    for candidate in _busco_url_candidates(primary_url):
+        try:
+            r = requests.head(candidate, timeout=10, verify=False, allow_redirects=True)
+            if r.status_code == 200:
+                url_to_use = candidate
+                break
+            logger.warning(f"BUSCO URL not available (HTTP {r.status_code}): {candidate}")
+        except requests.exceptions.RequestException as exc:
+            logger.warning(f"BUSCO URL probe failed: {candidate} — {exc}")
+
+    if url_to_use is None:
+        logger.critical(
+            f"Could not find a valid download URL for BUSCO lineage '{species}'. "
+            f"Pre-stage the '{species}_{odb_version}' directory under $FUNANNOTATE2_DB "
+            f"or update downloads.json with a working URL."
+        )
+        raise SystemExit(1)
+
+    busco_tgz = os.path.join(env["FUNANNOTATE2_DB"], os.path.basename(url_to_use))
+    logger.info(f"Downloading {species}_{odb_version} model from {url_to_use}")
+    download(url_to_use, busco_tgz, wget=False)
+
     if os.path.isfile(busco_tgz):
         runSubprocess(
             ["tar", "-zxf", os.path.basename(busco_tgz)],
             logger,
             cwd=env["FUNANNOTATE2_DB"],
         )
-        if os.path.isdir(busco_model_path):
+        # The tarball may extract to a different name (e.g. odb10 content used as
+        # odb12 fallback). Rename to the expected path so future isdir checks pass.
+        tgz_stem = os.path.basename(url_to_use)
+        for ext in (".tar.gz", ".tar"):
+            tgz_stem = tgz_stem.replace(ext, "")
+        extracted = os.path.join(env["FUNANNOTATE2_DB"], tgz_stem)
+        if os.path.isdir(extracted) and extracted != busco_model_path:
+            logger.info(f"Renaming {extracted} → {busco_model_path}")
+            os.rename(extracted, busco_model_path)
+        if os.path.isfile(busco_tgz):
             os.remove(busco_tgz)
+
     if not os.path.isdir(busco_model_path):
-        logger.critical(
-            f"Unable to download/extract BUSCO lineage to {busco_model_path}"
-        )
+        logger.critical(f"Unable to download/extract BUSCO lineage to {busco_model_path}")
         raise SystemExit(1)
     return busco_model_path
 
